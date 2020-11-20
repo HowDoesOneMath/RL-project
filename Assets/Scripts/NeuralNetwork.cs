@@ -5,10 +5,11 @@ using UnityEngine;
 public class NeuralNetwork
 {
     public bool isOk { get; private set; } = true;
-    bool isDirty = false;
+    //bool isDirty = false;
 
-    Jatrix[] perceptrons;
-    Jatrix combined;
+    public Jatrix[] perceptrons;
+    public Jatrix[] weightMatrices;
+    //Jatrix combined;
 
     int inputSize, outputSize;
 
@@ -25,13 +26,13 @@ public class NeuralNetwork
         outputSize = dimensions[dimensions.Count - 1];
 
         perceptrons = new Jatrix[dimensions.Count - 1];
+        weightMatrices = new Jatrix[dimensions.Count - 1];
 
         for (int i = 0; i < dimensions.Count - 1; ++i)
         {
-            perceptrons[i] = new Jatrix(dimensions[i + 1], dimensions[i]);
+            perceptrons[i] = new Jatrix(dimensions[i + 1], 1);
+            weightMatrices[i] = new Jatrix(dimensions[i + 1], dimensions[i]);
         }
-
-        RecalculateCombined();
     }
 
     public NeuralNetwork(NeuralNetwork copy)
@@ -39,14 +40,12 @@ public class NeuralNetwork
         inputSize = copy.inputSize;
         outputSize = copy.outputSize;
 
-        perceptrons = new Jatrix[copy.perceptrons.Length];
+        weightMatrices = new Jatrix[copy.weightMatrices.Length];
 
-        for (int i = 0; i < perceptrons.Length; ++i)
+        for (int i = 0; i < weightMatrices.Length; ++i)
         {
-            perceptrons[i] = new Jatrix(copy.perceptrons[i]);
+            weightMatrices[i] = new Jatrix(copy.weightMatrices[i]);
         }
-
-        RecalculateCombined();
     }
 
     public void BeatPerceptronsWithHammer(float strength)
@@ -56,17 +55,29 @@ public class NeuralNetwork
 
     public void RandomizeWeights(float range)
     {
-        isDirty = true;
-
-        for (int i = 0; i < perceptrons.Length; ++i)
+        for (int i = 0; i < weightMatrices.Length; ++i)
         {
-            Jatrix mat = perceptrons[i];
+            Jatrix mat = weightMatrices[i];
 
             for (int j = 0; j < mat.width; ++j)
             {
                 for (int k = 0; k < mat.height; ++k)
                 {
                     mat[j, k] += Random.Range(-range, range);
+                }
+            }
+        }
+    }
+
+    public void BackPropagate(float severity, float outputDifference)
+    {
+        for (int i = weightMatrices.Length - 1; i >= 0; --i)
+        {
+            for (int j = 0; j < perceptrons[i].width; ++j)
+            {
+                for (int k = 0; k < weightMatrices[i].height; ++k)
+                {
+                    weightMatrices[i][j, k] -= perceptrons[i][j, 0] * severity * outputDifference;
                 }
             }
         }
@@ -86,32 +97,36 @@ public class NeuralNetwork
             return null;
         }
 
-        if (isDirty)
+        Jatrix combined = new Jatrix(inputs);
+
+        for (int i = 0; i < weightMatrices.Length; ++i)
         {
-            RecalculateCombined();
+            combined *= weightMatrices[i];
+
+            for (int j = 0; j < combined.width; ++j)
+            {
+                //combined[j, 0] = 2f / (1f + Mathf.Exp(-combined[j, 0])) - 1;
+                if (combined[j, 0] > 0.5f)
+                    combined[j, 0] = 1;
+                else if (combined[j, 0] < 0.5f)
+                    combined[j, 0] = -1;
+                else
+                    combined[j, 0] = 0;
+            }
+
+            perceptrons[i] = new Jatrix(combined);
         }
 
-        Jatrix toRet = new Jatrix(inputs);
-
-        toRet *= combined;
-
-        return toRet;
-    }
-
-    void RecalculateCombined()
-    {
-        combined = perceptrons[0];
-
-        for (int i = 1; i < perceptrons.Length; ++i)
-        {
-            combined *= perceptrons[i];
-        }
-
-        isDirty = false;
+        return combined;
     }
 
     public void DebugPerceptron(int number)
     {
         perceptrons[number].DebugMatrix();
+    }
+
+    public void DebugMatrix(int number)
+    {
+        weightMatrices[number].DebugMatrix();
     }
 }

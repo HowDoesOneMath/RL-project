@@ -4,7 +4,8 @@ using UnityEngine;
 
 public class CarManager : MonoBehaviour
 {
-    public int iterations = 100;
+    public List<int> winnerCopies;
+    int totalCars = 0;
 
     public CarController prefab;
 
@@ -15,8 +16,7 @@ public class CarManager : MonoBehaviour
 
     public List<int> perceptronSizes;
 
-    public float timeUntilReset;
-    float modifiedTimeUntilReset = 0;
+    public float initialTimeUntilReset;
     float timer;
 
     public float randomizationStrength = 1f;
@@ -31,10 +31,15 @@ public class CarManager : MonoBehaviour
         bestCars = new List<CarController>();
         cars = new List<CarController>();
 
+        for (int i = 0; i < winnerCopies.Count; ++i)
+        {
+            ++totalCars;
+            totalCars += winnerCopies[i];
+        }
+
         StartCars();
 
-        modifiedTimeUntilReset = timeUntilReset;
-        timer = modifiedTimeUntilReset;
+        timer = initialTimeUntilReset;
     }
 
     private void FixedUpdate()
@@ -42,24 +47,36 @@ public class CarManager : MonoBehaviour
         for (int i = 0; i < cars.Count; ++i)
         {
             if (cars[i].waitingForTermination)
+            {
                 continue;
+            }
             cars[i].PseudoFixedUpdateStep1(this);
         }
 
         for (int i = 0; i < cars.Count; ++i)
         {
             if (cars[i].waitingForTermination)
+            {
                 continue;
+            }
             cars[i].PseudoFixedUpdateStep2(this);
         }
 
-        timer -= Time.fixedDeltaTime;
+        //timer -= Time.fixedDeltaTime;
+        //
+        //if (timer <= 0)
+        //{
+        //    ResetAndCullCars();
+        //
+        //    timer = Mathf.Min(maximumTimeUntilReset, modifiedTimeUntilReset);
+        //}
+    }
 
-        if (timer <= 0)
+    private void Update()
+    {
+        if (Input.GetKeyUp(KeyCode.Space))
         {
             ResetAndCullCars();
-
-            timer = modifiedTimeUntilReset;
         }
     }
 
@@ -68,12 +85,12 @@ public class CarManager : MonoBehaviour
         perceptronSizes.Insert(0, prefab.GetInputSize());
         perceptronSizes.Add(prefab.GetOutputSize());
 
-        for (int i = 0; i < iterations; ++i)
+        for (int i = 0; i < totalCars; ++i)
         {
             cars.Add(Instantiate(prefab, transform.position, transform.rotation));
             cars[i].InitCar(perceptronSizes, goal.position);
 
-            cars[i].brain.RandomizeWeights(Random.Range(0, randomizationStrength));
+            cars[i].brain.RandomizeWeights(randomizationStrength);
         }
     }
 
@@ -81,58 +98,59 @@ public class CarManager : MonoBehaviour
     {
         iteration++;
 
+        for (int i = 0; i < cars.Count; ++i)
+        {
+            cars[i].transform.position = transform.position;
+            cars[i].transform.rotation = transform.rotation;
+            cars[i].ResetCar(1);
+        }
+
+        return;
+
         bestCars.Clear();
         cars.Sort();
 
-        modifiedTimeUntilReset = timeUntilReset + CarController.maxDistance / prefab.carMaxVelocity;
-
-        for (int i = 0; i < iterations / 5; ++i)
+        for (int i = 0; i < winnerCopies.Count; ++i)
         {
-            if (cars[i].currentReward + cars[i].accumulatedReward > rewardThreshold)
-            {
-                bestCars.Add(cars[i]);
-            }
+            bestCars.Add(cars[i]);
+
+            cars[i].transform.position = transform.position;
+            cars[i].transform.rotation = transform.rotation;
+
+            cars[i].ResetCar(rewardFalloff);
         }
 
         Debug.Log("Iteration: " + iteration + ". Kept cars: " + bestCars.Count);
 
+        int copyNumber = 0;
         int iter = 0;
 
-        for (int i = 0; i < iterations; ++i)
+        for (int i = winnerCopies.Count; i < totalCars; ++i)
         {
-            if (i < bestCars.Count)
+            //Debug.Log("Making copy: " + iter + ", " + copyNumber);
+
+            cars[i].waitingForTermination = true;
+            Destroy(cars[i].gameObject);
+
+            cars[i] = Instantiate(prefab, transform.position, transform.rotation);
+
+            if (bestCars.Count > 0)
             {
-                cars[i] = bestCars[i];
-
-                cars[i].transform.position = transform.position;
-                cars[i].transform.rotation = transform.rotation;
-
-                cars[i].ResetCar(rewardFalloff);
+                cars[i].InitCar(bestCars[copyNumber]);
             }
             else
             {
-                cars[i].waitingForTermination = true;
-                Destroy(cars[i].gameObject);
-
-                cars[i] = Instantiate(prefab, transform.position, transform.rotation);
-
-                if (bestCars.Count > 0)
-                {
-                    cars[i].InitCar(bestCars[iter]);
-                }
-                else
-                {
-                    cars[i].InitCar(perceptronSizes, goal.position);
-                }
-
-                cars[i].brain.RandomizeWeights(Random.Range(0, randomizationStrength));
+                cars[i].InitCar(perceptronSizes, goal.position);
             }
+
+            cars[i].brain.RandomizeWeights(randomizationStrength);
 
             ++iter;
 
-            if (iter >= bestCars.Count)
+            if (iter >= winnerCopies[copyNumber])
             {
-                iter -= bestCars.Count;
+                iter = 0;
+                ++copyNumber;
             }
         }
     }

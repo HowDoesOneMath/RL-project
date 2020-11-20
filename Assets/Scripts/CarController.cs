@@ -7,20 +7,16 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
     public float carAccelerationSpeed = 100f;
     public float carMaxVelocity = 5f;
     public float carTurnSpeed = 60f;
-    public float carMidairAdjustSpeed = 5f;
     public float tireGroundedDistance = 0.1f;
     bool isGrounded = false;
 
-    public float outOfBounds = 60f;
-    public float failRadius = 6f;
+    public float distanceImportance = 0.01f;
     public float successthreshold = 5f;
     public float crashThreshold = 0.5f;
+    public float turnThreshold = 0.5f;
+    public float accelerationThreshold = 0.5f;
 
-    public Transform[] tires;
-
-    public float currentReward = 0;
-    public float accumulatedReward = 0;
-    public float jitterReduction = 1;
+    public Transform[] groundRaycast;
 
     public LayerMask raycastLayer;
     public float raycastLength = 50f;
@@ -41,8 +37,9 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
     float groundDistance = 0;
     //float relativeUp = 0;
     float relativeRight = 0;
-    float squareDistance = 0;
+    float squareInverseDistance = 0;
     float goalDirection = 0;
+    float distanceCrawled = 0;
 
     Vector3 goal;
     Vector3 start;
@@ -50,13 +47,13 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
     bool success = false;
 
-    float proximity = 0;
     float distanceCovered = 0;
-    public static float maxDistance = 0;
 
     public bool TagForDebug = false;
 
     public bool waitingForTermination = false;
+
+    float problemAmount = 0;
 
     private void Awake()
     {
@@ -79,11 +76,8 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
         goal = mainGoal;
 
-        currentReward = 0;
-        accumulatedReward = 0;
-        jitterReduction = 1;
-
         previousPosition = transform.position;
+        rb.velocity = transform.forward * carMaxVelocity;
     }
 
     public void InitCar(CarController toCopy)
@@ -95,54 +89,56 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
         goal = toCopy.goal;
 
-        currentReward = 0;
-        accumulatedReward = 0;
-        jitterReduction = 1;
-
         previousPosition = transform.position;
+        rb.velocity = transform.forward * carMaxVelocity;
     }
 
     public void ResetCar(float rewardDecay)
     {
-        accumulatedReward += currentReward;
-        accumulatedReward *= rewardDecay;
-        currentReward = 0;
-        jitterReduction = 1;
-
         success = false;
 
-        rb.velocity = Vector3.zero;
+        rb.velocity = transform.forward * carMaxVelocity;
         rb.angularVelocity = Vector3.zero;
 
         distanceCovered = 0;
-        maxDistance = 0;
 
         previousPosition = transform.position;
     }
 
     public int GetInputSize()
     {
-        return raycastSensors.Length * 2 + 2;
+        return raycastSensors.Length * 2 + 3;
     }
 
     public int GetOutputSize()
     {
-        return 4;
+        return 2;
     }
 
     public void PseudoFixedUpdateStep1(CarManager cm)
     {
+        if (!CalculateReward())
+            return;
+
         rb.AddForce(Vector3.down * 30f, ForceMode.Force);
 
-        CreateInputs();
+        if (!CreateInputs())
+            return;
 
         if (TagForDebug)
         {
+
+            brain.DebugMatrix(0);
+
             string bigData = "";
 
-            for (int i = 0; i < inputData.width; ++i)
+            for (int i = 0; i < brain.perceptrons.Length; ++i)
             {
-                bigData += ("\t " + inputData[i, 0]);
+                bigData += "\n";
+                for (int j = 0; j < brain.perceptrons[i].width; ++j)
+                {
+                    bigData += ("\t " + brain.perceptrons[i][j, 0]);
+                }
             }
 
             Debug.Log(bigData);
@@ -153,27 +149,17 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
     public void PseudoFixedUpdateStep2(CarManager cm)
     {
-        PerformOutputs();
-
-        CalculateReward();
+        if (!PerformOutputs())
+            return;
     }
 
-    public void CreateInputs()
+    public bool CreateInputs()
     {
-        proximity = 1;
+        Vector3 deltaPos = (transform.position - previousPosition);
 
-        if ((start - transform.position).sqrMagnitude >= failRadius * failRadius)
-        {
-            Vector3 deltaPos = (transform.position - previousPosition);
-            distanceCovered += deltaPos.magnitude;
-            
-            previousPosition = transform.position;
+        previousPosition = transform.position;
 
-            if (distanceCovered > maxDistance)
-            {
-                maxDistance = distanceCovered;
-            }
-        }
+        distanceCrawled = deltaPos.magnitude / (Time.fixedDeltaTime * carMaxVelocity);
 
         int dataSlot = 0;
 
@@ -184,7 +170,6 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
                 groundDistance = hitInfo.distance / raycastLength;
                 //relativeUp = Vector3.Dot(transform.up, hitInfo.normal);
                 relativeRight = Vector3.Dot(transform.right, hitInfo.normal);
-                proximity *= groundDistance;
 
                 //if (groundDistance < crashThreshold)
                 //{
@@ -203,49 +188,54 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
             PackData(relativeRight, ref dataSlot);
         }
 
-        squareDistance = (transform.position - goal).sqrMagnitude;
+        squareInverseDistance = (transform.position - goal).sqrMagnitude;
+        squareInverseDistance = 1f / (1f + squareInverseDistance);
+
         goalDirection = Vector3.Dot(transform.right, (transform.position - goal).normalized);
-        PackData(10f / (1f + squareDistance), ref dataSlot);
+
+        PackData(squareInverseDistance, ref dataSlot);
         PackData(goalDirection, ref dataSlot);
+        PackData(distanceCrawled, ref dataSlot);
         //PackData(currentReward, ref dataSlot);
+
+        return true;
     }
 
-    public void CalculateReward()
+    public bool CalculateReward()
     {
-        if (success || Mathf.Sqrt(squareDistance) < successthreshold)
+        problemAmount = 0f;
+
+        for (int i = 0; i < inputData.width; ++i)
         {
-            success = true;
-            currentReward = 1f;
-        }
-        else if (!isGrounded && Vector3.Dot(Vector3.up, transform.up) < 0)
-            currentReward = 0;
-        else if ((start - transform.position).sqrMagnitude < failRadius * failRadius)
-            currentReward = 0;
-        else
-        {
-            currentReward = Mathf.Clamp01((1f - Mathf.Sqrt(squareDistance) / outOfBounds) * distanceCovered / maxDistance * proximity);
+            problemAmount += Mathf.Exp(-inputData[i, 0] * inputData[i, 0]);
         }
 
-        mr.material.color = Color.green * currentReward;
+        problemAmount /= inputData.width;
+
+        brain.BackPropagate(0.1f, problemAmount);
+
+        return true;
     }
 
-    public void PerformOutputs()
+    public bool PerformOutputs()
     {
         float accelerate = outputData[0, 0];
         float turn = outputData[1, 0];
 
-        float accelerationThreshold = Mathf.Abs(outputData[2, 0]);
-        float turnThreshold = Mathf.Abs(outputData[3, 0]);
+        //float accelerationThreshold = Mathf.Abs(outputData[2, 0]);
+        //float turnThreshold = Mathf.Abs(outputData[3, 0]);
 
         isGrounded = false;
-        for (int i = 0; i < tires.Length; ++i)
+        for (int i = 0; i < groundRaycast.Length; ++i)
         {
-            if (Physics.Raycast(tires[i].position, -transform.up, tireGroundedDistance, raycastLayer))
+            if (Physics.Raycast(groundRaycast[i].position, -transform.up, tireGroundedDistance, raycastLayer))
             {
                 isGrounded = true;
                 break;
             }
         }
+
+        //Debug.Log(isGrounded);
 
         if (isGrounded)
         {
@@ -260,7 +250,7 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
             rb.velocity = Vector3.ClampMagnitude(rb.velocity, carMaxVelocity);
 
-            float turnStrength = rb.velocity.magnitude / carMaxVelocity;
+            float turnStrength = 1f;
             if (!isGrounded)
                 turnStrength = 0;
 
@@ -273,6 +263,8 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
                 transform.Rotate(Vector3.up, -carTurnSpeed * turnStrength * Time.fixedDeltaTime, Space.Self);
             }
         }
+
+        return true;
     }
 
     void PackData(float data, ref int dataSlot)
@@ -286,13 +278,13 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
     {
         if (other == null)
             return false;
-        return ((currentReward + accumulatedReward) * jitterReduction) == ((other.currentReward + other.accumulatedReward) * other.jitterReduction);
+        return (problemAmount) == (other.problemAmount);
     }
 
     public int CompareTo(CarController other)
     {
         if (other == null)
-            return -1;
-        return -(((currentReward + accumulatedReward) * jitterReduction).CompareTo((other.currentReward + other.accumulatedReward) * other.jitterReduction));
+            return 1;
+        return (problemAmount).CompareTo(problemAmount);
     }
 }
