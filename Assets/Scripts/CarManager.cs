@@ -4,154 +4,127 @@ using UnityEngine;
 
 public class CarManager : MonoBehaviour
 {
-    public List<int> winnerCopies;
-    int totalCars = 0;
+    public int winners = 0;
+    public int totalCars = 0;
 
     public CarController prefab;
 
-    List<CarController> cars;
+    public List<int> neuralNetworkShape;
+    int inputSize, outputSize;
+
+    public List<Transform> checkpoints;
+
+    List<CarController> allCars;
     List<CarController> bestCars;
 
-    public Transform goal;
+    int iteration;
 
-    public List<int> perceptronSizes;
+    public float maxWaitTime = 30f;
+    float timer = 0f;
 
-    public float initialTimeUntilReset;
-    float timer;
-
-    public float randomizationStrength = 1f;
-
-    public float rewardFalloff = 0.5f;
-    public float rewardThreshold = 0.00001f;
-
-    int iteration = 0;
+    float bestDistance = float.MaxValue;
+    float previousBest = float.MaxValue;
 
     private void Awake()
     {
+        allCars = new List<CarController>();
         bestCars = new List<CarController>();
-        cars = new List<CarController>();
 
-        for (int i = 0; i < winnerCopies.Count; ++i)
+        inputSize = prefab.GetInputSize();
+        outputSize = prefab.GetOutputSize();
+
+        neuralNetworkShape.Insert(0, inputSize);
+        neuralNetworkShape.Add(outputSize);
+
+        StartYourEngine();
+    }
+
+    void StartYourEngine()
+    {
+        for (int i = 0; i < totalCars; ++i)
         {
-            ++totalCars;
-            totalCars += winnerCopies[i];
+            allCars.Add(Instantiate(prefab, transform.position, transform.rotation));
+
+            allCars[i].InitCar(neuralNetworkShape, Random.Range(1f, 3f));
         }
 
-        StartCars();
-
-        timer = initialTimeUntilReset;
+        timer = maxWaitTime;
     }
 
     private void FixedUpdate()
     {
-        for (int i = 0; i < cars.Count; ++i)
+        bool allCrashed = true;
+
+        for (int i = 0; i < totalCars; ++i)
         {
-            if (cars[i].waitingForTermination)
-            {
+            if (allCars[i].Crashed)
                 continue;
-            }
-            cars[i].PseudoFixedUpdateStep1(this);
+
+            allCrashed = false;
+            allCars[i].PseudoFixedUpdateStep(this);
         }
 
-        for (int i = 0; i < cars.Count; ++i)
+        if (allCrashed)
         {
-            if (cars[i].waitingForTermination)
-            {
-                continue;
-            }
-            cars[i].PseudoFixedUpdateStep2(this);
+            ResetCars();
         }
+        else
+        {
+            timer -= Time.fixedDeltaTime;
 
-        //timer -= Time.fixedDeltaTime;
-        //
-        //if (timer <= 0)
-        //{
-        //    ResetAndCullCars();
-        //
-        //    timer = Mathf.Min(maximumTimeUntilReset, modifiedTimeUntilReset);
-        //}
+            if (timer <- 0)
+            {
+                ResetCars();
+            }
+        }
     }
 
     private void Update()
     {
-        if (Input.GetKeyUp(KeyCode.Space))
+        if (Input.GetKeyDown(KeyCode.Space))
         {
-            ResetAndCullCars();
+            ResetCars();
         }
     }
 
-    public void StartCars()
+    void ResetCars()
     {
-        perceptronSizes.Insert(0, prefab.GetInputSize());
-        perceptronSizes.Add(prefab.GetOutputSize());
+        
+        timer = maxWaitTime;
+        ++iteration;
 
-        for (int i = 0; i < totalCars; ++i)
+        for (int i = 0; i < allCars.Count; ++i)
         {
-            cars.Add(Instantiate(prefab, transform.position, transform.rotation));
-            cars[i].InitCar(perceptronSizes, goal.position);
-
-            cars[i].brain.RandomizeWeights(randomizationStrength);
+            allCars[i].Crashed = true;
         }
-    }
-
-    public void ResetAndCullCars()
-    {
-        iteration++;
-
-        for (int i = 0; i < cars.Count; ++i)
-        {
-            cars[i].transform.position = transform.position;
-            cars[i].transform.rotation = transform.rotation;
-            cars[i].ResetCar(1);
-        }
-
-        return;
 
         bestCars.Clear();
-        cars.Sort();
+        allCars.Sort();
 
-        for (int i = 0; i < winnerCopies.Count; ++i)
+        bestDistance = allCars[0].goalDistance;
+
+        for (int i = 0; i < winners; ++i)
         {
-            bestCars.Add(cars[i]);
-
-            cars[i].transform.position = transform.position;
-            cars[i].transform.rotation = transform.rotation;
-
-            cars[i].ResetCar(rewardFalloff);
+            bestCars.Add(allCars[i]);
+            bestCars[i].ResetCar();
         }
 
-        Debug.Log("Iteration: " + iteration + ". Kept cars: " + bestCars.Count);
-
-        int copyNumber = 0;
-        int iter = 0;
-
-        for (int i = winnerCopies.Count; i < totalCars; ++i)
+        for (int i = winners; i < totalCars; ++i)
         {
-            //Debug.Log("Making copy: " + iter + ", " + copyNumber);
+            allCars[i].markedForDeath = true;
+            Destroy(allCars[i].gameObject);
 
-            cars[i].waitingForTermination = true;
-            Destroy(cars[i].gameObject);
+            allCars[i] = Instantiate(prefab, transform.position, transform.rotation);
+            allCars[i].InitCar(bestCars[i % winners]);
 
-            cars[i] = Instantiate(prefab, transform.position, transform.rotation);
+            //for (int j = 0; j < allCars[i].brain.weightMatrices.Length; ++j)
+            //{
+            //    allCars[i].brain.weightMatrices[j] *= 0.95f;
+            //}
 
-            if (bestCars.Count > 0)
-            {
-                cars[i].InitCar(bestCars[copyNumber]);
-            }
-            else
-            {
-                cars[i].InitCar(perceptronSizes, goal.position);
-            }
-
-            cars[i].brain.RandomizeWeights(randomizationStrength);
-
-            ++iter;
-
-            if (iter >= winnerCopies[copyNumber])
-            {
-                iter = 0;
-                ++copyNumber;
-            }
+            allCars[i].brain.RandomizeWeights( 0.01f);
         }
+
+        previousBest = bestDistance;
     }
 }

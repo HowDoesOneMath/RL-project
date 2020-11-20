@@ -215,9 +215,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e5cd2a572e2c814eb449bc071cd92c0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  carAccelerationSpeed: 100
-  carMaxVelocity: 9
-  carTurnSpeed: 180
+  carSpeedFast: 30
+  carSpeedMedium: 20
+  carSpeedSlow: 10
+  carTurnSpeed: 135
   tireGroundedDistance: 0.05
   distanceImportance: 0.01
   successthreshold: 5
@@ -229,14 +230,15 @@ MonoBehaviour:
   raycastLayer:
     serializedVersion: 2
     m_Bits: 55
-  raycastLength: 3
-  raycastSensors:
-  - {fileID: 5133267892849643594}
-  - {fileID: 5383904716512238348}
-  - {fileID: 3597107548804767230}
-  - {fileID: 2120597931962913643}
+  raycastLength: 5
+  forwardSensor: {fileID: 5133267892849643594}
+  backwardSensor: {fileID: 5383904716512238348}
+  leftSensor: {fileID: 2120597931962913643}
+  rightSensor: {fileID: 3597107548804767230}
+  markedForDeath: 0
   TagForDebug: 0
   waitingForTermination: 0
+  accumulatedReprecussion: 0
 --- !u!1 &2886886595768644419
 GameObject:
   m_ObjectHideFlags: 0
@@ -247,7 +249,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3597107548804767230}
   m_Layer: 12
-  m_Name: Sensor (2)
+  m_Name: RightSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -358,7 +360,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5133267892849643594}
   m_Layer: 12
-  m_Name: Sensor
+  m_Name: FrontSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -388,7 +390,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5383904716512238348}
   m_Layer: 12
-  m_Name: Sensor (1)
+  m_Name: BackSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -499,7 +501,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2120597931962913643}
   m_Layer: 12
-  m_Name: Sensor (3)
+  m_Name: LeftSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

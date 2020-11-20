@@ -11,7 +11,8 @@ public class NeuralNetwork
     public Jatrix[] weightMatrices;
     //Jatrix combined;
 
-    int inputSize, outputSize;
+    public int inputSize { get; private set; }
+    public int outputSize { get; private set; }
 
     public NeuralNetwork(List<int> dimensions)
     {
@@ -41,10 +42,12 @@ public class NeuralNetwork
         outputSize = copy.outputSize;
 
         weightMatrices = new Jatrix[copy.weightMatrices.Length];
+        perceptrons = new Jatrix[copy.perceptrons.Length];
 
         for (int i = 0; i < weightMatrices.Length; ++i)
         {
             weightMatrices[i] = new Jatrix(copy.weightMatrices[i]);
+            perceptrons[i] = new Jatrix(copy.perceptrons[i]);
         }
     }
 
@@ -77,7 +80,7 @@ public class NeuralNetwork
             {
                 for (int k = 0; k < weightMatrices[i].height; ++k)
                 {
-                    weightMatrices[i][j, k] -= perceptrons[i][j, 0] * severity * outputDifference;
+                    weightMatrices[i][j, k] += perceptrons[i][j, 0] * severity * outputDifference;
                 }
             }
         }
@@ -105,13 +108,13 @@ public class NeuralNetwork
 
             for (int j = 0; j < combined.width; ++j)
             {
-                //combined[j, 0] = 2f / (1f + Mathf.Exp(-combined[j, 0])) - 1;
-                if (combined[j, 0] > 0.5f)
-                    combined[j, 0] = 1;
-                else if (combined[j, 0] < 0.5f)
-                    combined[j, 0] = -1;
-                else
-                    combined[j, 0] = 0;
+                combined[j, 0] = 2f / (1f + Mathf.Exp(-combined[j, 0])) - 1;
+                //if (combined[j, 0] > 0.5f)
+                //    combined[j, 0] = 1;
+                //else if (combined[j, 0] < 0.5f)
+                //    combined[j, 0] = -1;
+                //else
+                //    combined[j, 0] = 0;
             }
 
             perceptrons[i] = new Jatrix(combined);

@@ -61,6 +61,17 @@ public class Jatrix
         set { elements[i][j] = value; }
     }
 
+    public void SetAs(float val)
+    {
+        for (int i = 0; i < width; ++i)
+        {
+            for (int j = 0; j < height; ++j)
+            {
+                elements[i][j] = val;
+            }
+        }
+    }
+
     public static Jatrix operator+(Jatrix a, Jatrix b)
     {
         if (a.width != b.width || a.height != b.height)
@@ -141,6 +152,20 @@ public class Jatrix
                 }
 
                 toRet[i, j] = sum;
+            }
+        }
+
+        return toRet;
+    }
+
+    public static Jatrix operator *(Jatrix a, float b)
+    {
+        Jatrix toRet = new Jatrix(a.width, a.height);
+        for (int i = 0; i < toRet.width; ++i)
+        {
+            for (int j = 0; j < toRet.height; ++j)
+            {
+                toRet[i, j] = a[i, j] * b;
             }
         }
 
