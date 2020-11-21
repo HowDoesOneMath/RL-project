@@ -218,13 +218,10 @@ MonoBehaviour:
   carSpeedFast: 30
   carSpeedMedium: 20
   carSpeedSlow: 10
-  carTurnSpeed: 135
+  carTurnSpeed: 120
   tireGroundedDistance: 0.05
-  distanceImportance: 0.01
-  successthreshold: 5
-  crashThreshold: 0.5
-  turnThreshold: 0.2
-  accelerationThreshold: 0.2
+  turnThreshold: 0.5
+  deaccelerationThreshold: 0.7
   groundRaycast:
   - {fileID: 8087508694742323314}
   raycastLayer:

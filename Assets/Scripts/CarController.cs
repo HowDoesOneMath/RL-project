@@ -12,11 +12,9 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
     public float tireGroundedDistance = 0.1f;
     bool isGrounded = false;
 
-    public float distanceImportance = 0.01f;
-    public float successthreshold = 5f;
-    public float crashThreshold = 0.5f;
+    public float score { get; set; } = 0;
     public float turnThreshold = 0.5f;
-    public float accelerationThreshold = 0.5f;
+    public float deaccelerationThreshold = 0.5f;
 
     public Transform[] groundRaycast;
 
@@ -43,17 +41,9 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
     Jatrix inputData;
     Jatrix outputData;
 
-    public float goalDistance { get; private set; } = 0;
-    float steering = 0;
-    float distanceCrawled = 0;
-
     VQ start;
     Vector3 previousPosition;
     Vector3 deltaPos;
-    float dxHit = 0;
-    float dzHit = 0;
-    float previousZHit = 0;
-    float previousXHit = 0;
 
     bool crashed = false;
     public bool Crashed
@@ -66,14 +56,13 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
             if (crashed)
             {
-                accumulatedReprecussion -= distanceCovered;
+                score = distanceCovered;
+                brain.BackPropagate(0.1f, accumulatedReprecussion);
             }
         }
     }
 
     public bool markedForDeath = false;
-
-    bool success = false;
 
     public float distanceCovered { get; private set; } = 0;
 
@@ -104,10 +93,8 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
         brain = new NeuralNetwork(neuralNetworkShape);
         brain.BeatPerceptronsWithHammer(randomizationStrength);
 
-        //goal = new VQ(mainGoal.position, mainGoal.rotation);
-
         previousPosition = transform.position;
-        rb.velocity = transform.forward * carSpeedFast;
+        rb.velocity = transform.forward * carSpeedMedium;
     }
 
     public void InitCar(CarController toCopy)
@@ -117,15 +104,12 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
         inputData = new Jatrix(toCopy.inputData);
         outputData = new Jatrix(toCopy.outputData);
 
-        //goal = toCopy.goal;
-
         previousPosition = transform.position;
-        rb.velocity = transform.forward * carSpeedFast;
+        rb.velocity = transform.forward * carSpeedMedium;
     }
 
     public void ResetCar()
     {
-        success = false;
         markedForDeath = false;
         Crashed = false;
 
@@ -138,7 +122,7 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
         transform.rotation = start.rotation;
         previousPosition = transform.position;
 
-        rb.velocity = transform.forward * carSpeedFast;
+        rb.velocity = transform.forward * carSpeedMedium;
     }
 
     public int GetInputSize()
@@ -163,8 +147,6 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
         if (TagForDebug)
         {
-            brain.DebugMatrix(0);
-
             string bigData = "";
             
             for (int i = 0; i < brain.perceptrons.Length; ++i)
@@ -195,56 +177,37 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
         distanceCovered += deltaPos.magnitude;
 
-        distanceCrawled = deltaPos.magnitude / (Time.fixedDeltaTime * carSpeedFast);
-
         float zOrientation = 0, xOrientation = 0;
 
-        if (Physics.Raycast(forwardSensor.position, forwardSensor.forward, out hitInfo, raycastLength, raycastLayer))
-        {
-            zOrientation -= hitInfo.distance / raycastLength;
-        }
-        else
-        {
-            zOrientation -= 1;
-        }
+        CheckRaycast(forwardSensor, backwardSensor, ref zOrientation);
 
-        if (Physics.Raycast(backwardSensor.position, backwardSensor.forward, out hitInfo, raycastLength, raycastLayer))
-        {
-            zOrientation += hitInfo.distance / raycastLength;
-        }
-        else
-        {
-            zOrientation += 1;
-        }
-
-        dzHit = zOrientation - previousZHit;
-        previousZHit = zOrientation;
-
-        if (Physics.Raycast(leftSensor.position, leftSensor.forward, out hitInfo, raycastLength, raycastLayer))
-        {
-            xOrientation -= hitInfo.distance / raycastLength;
-        }
-        else
-        {
-            xOrientation -= 1;
-        }
-
-        if (Physics.Raycast(rightSensor.position, rightSensor.forward, out hitInfo, raycastLength, raycastLayer))
-        {
-            xOrientation += hitInfo.distance / raycastLength;
-        }
-        else
-        {
-            xOrientation += 1;
-        }
-
-        dxHit = xOrientation - previousXHit;
-        previousXHit = xOrientation;
+        CheckRaycast(leftSensor, rightSensor, ref xOrientation);
 
         PackData(zOrientation, ref dataSlot);
         PackData(xOrientation, ref dataSlot);
 
         return true;
+    }
+
+    void CheckRaycast(Transform sensorNegative, Transform sensorPositive, ref float orientation)
+    {
+        if (Physics.SphereCast(sensorNegative.position, 1f, sensorNegative.forward, out hitInfo, raycastLength, raycastLayer))
+        {
+            orientation -= hitInfo.distance / raycastLength;
+        }
+        else
+        {
+            orientation -= 1;
+        }
+
+        if (Physics.SphereCast(sensorPositive.position, 1f, sensorPositive.forward, out hitInfo, raycastLength, raycastLayer))
+        {
+            orientation += hitInfo.distance / raycastLength;
+        }
+        else
+        {
+            orientation += 1;
+        }
     }
 
     public bool CalculateReward()
@@ -259,11 +222,19 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
         singleReprecussion = 0f;
 
-        singleReprecussion += 1 - (1 - dzHit) * (1 - dxHit);
+        if (Mathf.Abs(inputData[0, 0]) > Mathf.Abs(inputData[1, 0]))
+        {
+            singleReprecussion -= inputData[0, 0];
+        }
+        else
+        {
+            singleReprecussion -= inputData[1, 0];
+        }
 
-        accumulatedReprecussion += singleReprecussion * deltaPos.magnitude;
+        accumulatedReprecussion *= Mathf.Pow(0.1f, Time.fixedDeltaTime);
+        accumulatedReprecussion += singleReprecussion;
 
-        brain.BackPropagate(0.1f, accumulatedReprecussion);
+        brain.BackPropagate(0.01f, accumulatedReprecussion);
 
         return true;
     }
@@ -285,17 +256,17 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
 
         if (isGrounded)
         {
-            if (accelerate >= accelerationThreshold)
+            if (accelerate >= deaccelerationThreshold)
             {
-                rb.velocity = new Vector3(0, rb.velocity.y, 0) + transform.forward * carSpeedFast;
+                rb.velocity = new Vector3(0, rb.velocity.y, 0) + transform.forward * carSpeedSlow;
             }
-            else if (accelerate <= -accelerationThreshold)
+            else if (accelerate <= -deaccelerationThreshold)
             {
                 rb.velocity = new Vector3(0, rb.velocity.y, 0) + transform.forward * carSpeedMedium;
             }
             else
             {
-                rb.velocity = new Vector3(0, rb.velocity.y, 0) + transform.forward * carSpeedSlow;
+                rb.velocity = new Vector3(0, rb.velocity.y, 0) + transform.forward * carSpeedFast;
             }
 
             float turnStrength = 1f;
@@ -331,14 +302,14 @@ public class CarController : MonoBehaviour, System.IEquatable<CarController>, Sy
     {
         if (other == null)
             return false;
-        return (distanceCovered) == (other.distanceCovered);
+        return (score) == (other.score);
     }
 
     public int CompareTo(CarController other)
     {
         if (other == null)
             return -1;
-        return -(distanceCovered).CompareTo(other.distanceCovered);
+        return -(score).CompareTo(other.score);
     }
 }
 

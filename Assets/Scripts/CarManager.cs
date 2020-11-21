@@ -17,13 +17,10 @@ public class CarManager : MonoBehaviour
     List<CarController> allCars;
     List<CarController> bestCars;
 
-    int iteration;
-
     public float maxWaitTime = 30f;
     float timer = 0f;
 
-    float bestDistance = float.MaxValue;
-    float previousBest = float.MaxValue;
+    public float crashSeverity;
 
     private void Awake()
     {
@@ -45,7 +42,7 @@ public class CarManager : MonoBehaviour
         {
             allCars.Add(Instantiate(prefab, transform.position, transform.rotation));
 
-            allCars[i].InitCar(neuralNetworkShape, Random.Range(1f, 3f));
+            allCars[i].InitCar(neuralNetworkShape, 2f);
         }
 
         timer = maxWaitTime;
@@ -91,40 +88,47 @@ public class CarManager : MonoBehaviour
     {
         
         timer = maxWaitTime;
-        ++iteration;
 
         for (int i = 0; i < allCars.Count; ++i)
         {
             allCars[i].Crashed = true;
         }
 
-        bestCars.Clear();
         allCars.Sort();
-
-        bestDistance = allCars[0].goalDistance;
 
         for (int i = 0; i < winners; ++i)
         {
-            bestCars.Add(allCars[i]);
-            bestCars[i].ResetCar();
+            if (bestCars.Count <= i || bestCars[i].score < allCars[0].score)
+            {
+                bestCars.Insert(i, allCars[0]);
+                allCars[0].gameObject.SetActive(false);
+                allCars.RemoveAt(0);
+                allCars.Add(null);
+
+                if (bestCars.Count > winners)
+                {
+                    CarController cc = bestCars[bestCars.Count - 1];
+                    bestCars.RemoveAt(bestCars.Count - 1);
+
+                    Destroy(cc.gameObject);
+                }
+            }
         }
 
-        for (int i = winners; i < totalCars; ++i)
+        for (int i = 0; i < totalCars; ++i)
         {
-            allCars[i].markedForDeath = true;
-            Destroy(allCars[i].gameObject);
+            if (allCars[i] != null)
+            {
+                allCars[i].markedForDeath = true;
+                Destroy(allCars[i].gameObject);
+            }
 
             allCars[i] = Instantiate(prefab, transform.position, transform.rotation);
-            allCars[i].InitCar(bestCars[i % winners]);
+            allCars[i].InitCar(bestCars[i % bestCars.Count]);
 
-            //for (int j = 0; j < allCars[i].brain.weightMatrices.Length; ++j)
-            //{
-            //    allCars[i].brain.weightMatrices[j] *= 0.95f;
-            //}
-
-            allCars[i].brain.RandomizeWeights( 0.01f);
+            float variance = ((1f * i) / totalCars);
+            variance *= variance;
+            allCars[i].brain.RandomizeWeights(2f * variance);
         }
-
-        previousBest = bestDistance;
     }
 }
