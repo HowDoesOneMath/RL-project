@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+//Entire class was used for testing
+//Currently deprecated
 public class TestNN : MonoBehaviour
 {
     // Start is called before the first frame update

@@ -2,11 +2,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+//Matrix class, named Jatrix
 public class Jatrix
 {
+    //Necessary matrix data
     private float[][] elements;
     public int width, height;
 
+    //New matrix constructor, takes in width and height, initializes all elements to 0
     public Jatrix(int matrixWidth, int matrixHeight)
     {
         width = Mathf.Max(matrixWidth, 1);
@@ -25,6 +28,7 @@ public class Jatrix
         }
     }
 
+    //Quickly makes an identity matrix
     public static Jatrix Identity(int rows)
     {
         Jatrix toReturn = new Jatrix(rows, rows);
@@ -37,6 +41,7 @@ public class Jatrix
         return toReturn;
     }
 
+    //Copy constructor, allows us to efficiently duplicate matrics
     public Jatrix(Jatrix toCopy)
     {
         width = toCopy.width;
@@ -55,12 +60,14 @@ public class Jatrix
         }
     }
 
+    //Allows us to use array access, so instead of Matrix.elements[i][j] we can do Matrix[i,j]
     public float this[int i, int j]
     {
         get { return elements[i][j]; }
         set { elements[i][j] = value; }
     }
 
+    //Used to instantly initialize the matrix to a given value - currently deprecated
     public void SetAs(float val)
     {
         for (int i = 0; i < width; ++i)
@@ -72,6 +79,7 @@ public class Jatrix
         }
     }
 
+    //Overloaded matrix addition
     public static Jatrix operator+(Jatrix a, Jatrix b)
     {
         if (a.width != b.width || a.height != b.height)
@@ -92,11 +100,13 @@ public class Jatrix
         return toRet;
     }
 
+    //Overloaded positive operator
     public static Jatrix operator +(Jatrix a)
     {
         return a;
     }
 
+    //Overloaded subtraction operator
     public static Jatrix operator-(Jatrix a, Jatrix b)
     {
         if (a.width != b.width || a.height != b.height)
@@ -117,6 +127,7 @@ public class Jatrix
         return toRet;
     }
 
+    //Overloaded negative operator
     public static Jatrix operator -(Jatrix a)
     {
         Jatrix toRet = new Jatrix(a.width, a.height);
@@ -131,6 +142,7 @@ public class Jatrix
         return toRet;
     }
 
+    //Overloaded multiplication operator
     public static Jatrix operator *(Jatrix a, Jatrix b)
     {
         if (a.width != b.height)
@@ -158,6 +170,7 @@ public class Jatrix
         return toRet;
     }
 
+    //Overloaded multiplication operator, using a float
     public static Jatrix operator *(Jatrix a, float b)
     {
         Jatrix toRet = new Jatrix(a.width, a.height);
@@ -172,6 +185,7 @@ public class Jatrix
         return toRet;
     }
 
+    //Allows us to see all the elements of a matrix
     public void DebugMatrix()
     {
         Debug.Log(width + ", " + height);
